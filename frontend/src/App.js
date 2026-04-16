@@ -30,7 +30,6 @@ const getInitialSocketUrl = () => {
 
 const createSocket = (url) =>
   io(normalizeUrl(url), {
-    transports: ["polling", "websocket"],
     reconnection: true,
     reconnectionAttempts: 15,
     reconnectionDelay: 750,

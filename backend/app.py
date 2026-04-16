@@ -7,7 +7,7 @@ import math
 from itertools import count
 
 app = Flask(__name__)
-ASYNC_MODE = os.environ.get("SOCKET_ASYNC_MODE", "threading")
+ASYNC_MODE = os.environ.get("SOCKET_ASYNC_MODE", "gevent")
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
