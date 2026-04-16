@@ -1,8 +1,25 @@
 import React, { useEffect, useState } from "react";
 import io from "socket.io-client";
 
-const socketUrl = process.env.REACT_APP_SOCKET_URL || `${window.location.protocol}//${window.location.hostname}:10000`;
-const socket = io(socketUrl);
+const normalizeUrl = (url) => (url || "").trim().replace(/\/+$/, "");
+
+const getSocketUrl = () => {
+  const envUrl = normalizeUrl(process.env.REACT_APP_SOCKET_URL);
+  if (envUrl) return envUrl;
+
+  const { protocol, hostname, port } = window.location;
+  const isLocal = hostname === "localhost" || hostname === "127.0.0.1";
+  if (isLocal) return `${protocol}//${hostname}:10000`;
+
+  return `${protocol}//${hostname}${port ? `:${port}` : ""}`;
+};
+
+const socket = io(getSocketUrl(), {
+  transports: ["websocket", "polling"],
+  reconnection: true,
+  reconnectionAttempts: 10,
+  timeout: 10000,
+});
 const COLORS = ["red", "yellow", "green", "blue"];
 
 const UNO_COLORS = {
@@ -257,6 +274,7 @@ function App() {
   const [joined, setJoined] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [wildCardId, setWildCardId] = useState(null);
+  const [connected, setConnected] = useState(socket.connected);
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : MOBILE_BREAKPOINT,
   );
@@ -277,6 +295,11 @@ function App() {
       setErrorMsg("Please enter your name and room.");
       return;
     }
+
+    if (!socket.connected) {
+      socket.connect();
+    }
+
     socket.emit("join", { username: username.trim(), room: room.trim() });
   };
 
@@ -312,6 +335,19 @@ function App() {
   };
 
   useEffect(() => {
+    socket.on("connect", () => {
+      setConnected(true);
+    });
+
+    socket.on("disconnect", () => {
+      setConnected(false);
+    });
+
+    socket.on("connect_error", () => {
+      setConnected(false);
+      setErrorMsg("Cannot connect to game server. Check backend URL / deployment.");
+    });
+
     socket.on("joined", () => {
       setJoined(true);
       setErrorMsg("");
@@ -327,6 +363,9 @@ function App() {
     });
 
     return () => {
+      socket.off("connect");
+      socket.off("disconnect");
+      socket.off("connect_error");
       socket.off("joined");
       socket.off("state");
       socket.off("error_msg");
@@ -341,6 +380,9 @@ function App() {
       <div style={ui.panel}>
         <h1 style={{ marginTop: 0, marginBottom: "8px", letterSpacing: "1px", fontSize: isMobile ? "1.6rem" : "2rem" }}>UNO Party Table</h1>
         <p style={{ marginTop: 0, color: "#bfdbfe" }}>Real-card look for large friendly matches (10-20+ players)</p>
+        <p style={{ marginTop: 0, marginBottom: "10px", color: connected ? "#86efac" : "#fca5a5", fontWeight: 700 }}>
+          Server: {connected ? "Connected" : "Disconnected"}
+        </p>
 
         {!joined && (
           <div>

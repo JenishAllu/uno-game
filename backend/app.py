@@ -17,6 +17,11 @@ card_counter = count(1)
 MAX_PLAYERS_PER_ROOM = 40
 
 
+@app.get("/")
+def health_check():
+    return {"status": "ok", "service": "uno-backend"}
+
+
 def create_single_deck():
     deck = []
     for color in colors:
@@ -162,6 +167,8 @@ def join(data):
     username = (data.get("username") or "").strip()
     sid = request.sid
 
+    app.logger.info("Join requested sid=%s room=%s username=%s", sid, room, username)
+
     if not room or not username:
         send_error(sid, "Please provide both room and name.")
         return
@@ -190,6 +197,16 @@ def join(data):
 
     emit("joined", {"room": room, "username": username}, to=sid)
     broadcast_state(room)
+
+
+@socketio.on("connect")
+def on_connect():
+    app.logger.info("Socket connected sid=%s", request.sid)
+
+
+@socketio.on("disconnect")
+def on_disconnect():
+    app.logger.info("Socket disconnected sid=%s", request.sid)
 
 
 @socketio.on("start_game")
