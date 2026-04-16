@@ -1,4 +1,5 @@
 
+import os
 from flask import Flask, request
 from flask_socketio import SocketIO, join_room, leave_room, emit
 import random
@@ -376,4 +377,5 @@ def _remove_player(room, sid):
     return True
 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", os.environ.get("BACKEND_PORT", 10000)))
+    socketio.run(app, host="0.0.0.0", port=port)
