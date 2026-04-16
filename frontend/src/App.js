@@ -1,11 +1,25 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import io from "socket.io-client";
 
 const normalizeUrl = (url) => (url || "").trim().replace(/\/+$/, "");
+const SOCKET_URL_STORAGE_KEY = "uno_socket_url";
 
-const getSocketUrl = () => {
+const getInitialSocketUrl = () => {
   const envUrl = normalizeUrl(process.env.REACT_APP_SOCKET_URL);
   if (envUrl) return envUrl;
+
+  if (typeof window !== "undefined") {
+    const params = new URLSearchParams(window.location.search);
+    const urlFromQuery = normalizeUrl(params.get("backendUrl") || params.get("socketUrl"));
+    if (urlFromQuery) return urlFromQuery;
+
+    const storedUrl = normalizeUrl(window.localStorage.getItem(SOCKET_URL_STORAGE_KEY));
+    if (storedUrl) return storedUrl;
+  }
+
+  if (typeof window === "undefined") {
+    return "http://localhost:10000";
+  }
 
   const { protocol, hostname, port } = window.location;
   const isLocal = hostname === "localhost" || hostname === "127.0.0.1";
@@ -14,12 +28,15 @@ const getSocketUrl = () => {
   return `${protocol}//${hostname}${port ? `:${port}` : ""}`;
 };
 
-const socket = io(getSocketUrl(), {
-  transports: ["polling", "websocket"],
-  reconnection: true,
-  reconnectionAttempts: 10,
-  timeout: 10000,
-});
+const createSocket = (url) =>
+  io(normalizeUrl(url), {
+    transports: ["polling", "websocket"],
+    reconnection: true,
+    reconnectionAttempts: 15,
+    reconnectionDelay: 750,
+    reconnectionDelayMax: 5000,
+    timeout: 10000,
+  });
 const COLORS = ["red", "yellow", "green", "blue"];
 
 const UNO_COLORS = {
@@ -274,10 +291,13 @@ function App() {
   const [joined, setJoined] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [wildCardId, setWildCardId] = useState(null);
-  const [connected, setConnected] = useState(socket.connected);
+  const [serverUrl, setServerUrl] = useState(getInitialSocketUrl);
+  const [serverUrlInput, setServerUrlInput] = useState(getInitialSocketUrl);
+  const [connected, setConnected] = useState(false);
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : MOBILE_BREAKPOINT,
   );
+  const socketRef = useRef(null);
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -290,17 +310,37 @@ function App() {
   const isMobile = windowWidth < MOBILE_BREAKPOINT;
   const ui = getResponsiveUi(isMobile);
 
+  const applyServerUrl = () => {
+    const nextUrl = normalizeUrl(serverUrlInput);
+    if (!nextUrl) {
+      setErrorMsg("Please enter a valid backend URL.");
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(SOCKET_URL_STORAGE_KEY, nextUrl);
+    }
+
+    setServerUrl(nextUrl);
+    setErrorMsg("");
+  };
+
   const joinGame = () => {
     if (!username.trim() || !room.trim()) {
       setErrorMsg("Please enter your name and room.");
       return;
     }
 
-    if (!socket.connected) {
-      socket.connect();
+    if (!socketRef.current) {
+      setErrorMsg("Game socket is not initialized yet.");
+      return;
     }
 
-    socket.emit("join", { username: username.trim(), room: room.trim() });
+    if (!socketRef.current.connected) {
+      socketRef.current.connect();
+    }
+
+    socketRef.current.emit("join", { username: username.trim(), room: room.trim().toLowerCase() });
   };
 
   const canPlay = (card) => {
@@ -312,65 +352,87 @@ function App() {
   };
 
   const playCard = (cardId, chosenColor = null) => {
-    socket.emit("play", { room, cardId, chosenColor });
+    socketRef.current?.emit("play", { room: room.trim().toLowerCase(), cardId, chosenColor });
   };
 
   const drawCard = () => {
-    socket.emit("draw", { room });
+    socketRef.current?.emit("draw", { room: room.trim().toLowerCase() });
   };
 
   const startGame = () => {
-    socket.emit("start_game", { room });
+    socketRef.current?.emit("start_game", { room: room.trim().toLowerCase() });
   };
 
   const restartGame = () => {
-    socket.emit("restart_game", { room });
+    socketRef.current?.emit("restart_game", { room: room.trim().toLowerCase() });
   };
 
   const leaveGame = () => {
-    socket.emit("leave", { room });
+    socketRef.current?.emit("leave", { room: room.trim().toLowerCase() });
     setGame(null);
     setJoined(false);
     setWildCardId(null);
   };
 
   useEffect(() => {
-    socket.on("connect", () => {
+    const url = normalizeUrl(serverUrl);
+    if (!url) {
+      setErrorMsg("Backend URL is missing. Set it above.");
+      return undefined;
+    }
+
+    const socket = createSocket(url);
+    socketRef.current = socket;
+    setConnected(socket.connected);
+
+    const onConnect = () => {
       setConnected(true);
-    });
+      setErrorMsg("");
+    };
 
-    socket.on("disconnect", () => {
+    const onDisconnect = () => {
       setConnected(false);
-    });
+    };
 
-    socket.on("connect_error", () => {
+    const onConnectError = () => {
       setConnected(false);
-      setErrorMsg("Cannot connect to game server. Check backend URL / deployment.");
-    });
+      setErrorMsg(`Cannot connect to game server at ${url}`);
+    };
 
-    socket.on("joined", () => {
+    const onJoined = () => {
       setJoined(true);
       setErrorMsg("");
-    });
+    };
 
-    socket.on("state", (data) => {
+    const onState = (data) => {
       setGame(data);
       setErrorMsg("");
-    });
+    };
 
-    socket.on("error_msg", (data) => {
+    const onErrorMsg = (data) => {
       setErrorMsg(data?.message || "Something went wrong.");
-    });
+    };
+
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+    socket.on("connect_error", onConnectError);
+    socket.on("joined", onJoined);
+    socket.on("state", onState);
+    socket.on("error_msg", onErrorMsg);
 
     return () => {
-      socket.off("connect");
-      socket.off("disconnect");
-      socket.off("connect_error");
-      socket.off("joined");
-      socket.off("state");
-      socket.off("error_msg");
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+      socket.off("connect_error", onConnectError);
+      socket.off("joined", onJoined);
+      socket.off("state", onState);
+      socket.off("error_msg", onErrorMsg);
+      socket.disconnect();
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
     };
-  }, []);
+  }, [serverUrl]);
 
   const isMyTurn = !!game?.players?.[game.turn]?.isYou;
   const isHost = !!game?.players?.find((player) => player.isYou)?.isHost;
@@ -383,6 +445,15 @@ function App() {
         <p style={{ marginTop: 0, marginBottom: "10px", color: connected ? "#86efac" : "#fca5a5", fontWeight: 700 }}>
           Server: {connected ? "Connected" : "Disconnected"}
         </p>
+        <div style={{ marginBottom: "12px" }}>
+          <input
+            style={ui.input}
+            placeholder="Backend URL (Render/AWS/local)"
+            value={serverUrlInput}
+            onChange={(e) => setServerUrlInput(e.target.value)}
+          />
+          <button style={ui.button} onClick={applyServerUrl}>Apply Server URL</button>
+        </div>
 
         {!joined && (
           <div>

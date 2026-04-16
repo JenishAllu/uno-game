@@ -7,7 +7,7 @@ import math
 from itertools import count
 
 app = Flask(__name__)
-ASYNC_MODE = os.environ.get("SOCKET_ASYNC_MODE", "gevent")
+ASYNC_MODE = os.environ.get("SOCKET_ASYNC_MODE", "threading")
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
@@ -215,11 +215,6 @@ def on_connect():
     app.logger.info("Socket connected sid=%s", request.sid)
 
 
-@socketio.on("disconnect")
-def on_disconnect():
-    app.logger.info("Socket disconnected sid=%s", request.sid)
-
-
 @socketio.on("start_game")
 def start_game(data):
     room = normalize_room_name(data.get("room"))
@@ -368,6 +363,7 @@ def leave(data):
 @socketio.on("disconnect")
 def handle_disconnect(data=None):
     sid = request.sid
+    app.logger.info("Socket disconnected sid=%s", sid)
     for room in list(rooms.keys()):
         if _remove_player(room, sid):
             break
