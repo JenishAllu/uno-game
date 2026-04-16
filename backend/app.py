@@ -7,7 +7,14 @@ import math
 from itertools import count
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+ASYNC_MODE = os.environ.get("SOCKET_ASYNC_MODE", "gevent")
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode=ASYNC_MODE,
+    ping_interval=20,
+    ping_timeout=30,
+)
 
 rooms = {}
 
@@ -37,6 +44,10 @@ def create_single_deck():
         deck.append({"id": next(card_counter), "color": "wild", "value": "+4"})
     random.shuffle(deck)
     return deck
+
+
+def normalize_room_name(room):
+    return (room or "").strip().lower()
 
 
 def create_decks(num_decks):
@@ -163,7 +174,7 @@ def reset_match_state(game):
 
 @socketio.on("join")
 def join(data):
-    room = (data.get("room") or "").strip()
+    room = normalize_room_name(data.get("room"))
     username = (data.get("username") or "").strip()
     sid = request.sid
 
@@ -211,7 +222,7 @@ def on_disconnect():
 
 @socketio.on("start_game")
 def start_game(data):
-    room = (data.get("room") or "").strip()
+    room = normalize_room_name(data.get("room"))
     sid = request.sid
     game = rooms.get(room)
 
@@ -235,7 +246,7 @@ def start_game(data):
 
 @socketio.on("restart_game")
 def restart_game(data):
-    room = (data.get("room") or "").strip()
+    room = normalize_room_name(data.get("room"))
     sid = request.sid
     game = rooms.get(room)
 
@@ -254,7 +265,7 @@ def restart_game(data):
 
 @socketio.on("play")
 def play(data):
-    room = (data.get("room") or "").strip()
+    room = normalize_room_name(data.get("room"))
     sid = request.sid
     card_id = data.get("cardId")
     chosen_color = data.get("chosenColor")
@@ -327,7 +338,7 @@ def play(data):
 
 @socketio.on("draw")
 def draw(data):
-    room = (data.get("room") or "").strip()
+    room = normalize_room_name(data.get("room"))
     sid = request.sid
     game = rooms.get(room)
 
@@ -349,7 +360,7 @@ def draw(data):
 
 @socketio.on("leave")
 def leave(data):
-    room = (data.get("room") or "").strip()
+    room = normalize_room_name(data.get("room"))
     sid = request.sid
     _remove_player(room, sid)
 

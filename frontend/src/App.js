@@ -15,7 +15,7 @@ const getSocketUrl = () => {
 };
 
 const socket = io(getSocketUrl(), {
-  transports: ["websocket", "polling"],
+  transports: ["polling", "websocket"],
   reconnection: true,
   reconnectionAttempts: 10,
   timeout: 10000,
