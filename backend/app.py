@@ -121,6 +121,7 @@ def build_state_for_player(game, sid):
                 "handCount": len(game["hands"].get(p["sid"], [])),
                 "isHost": p["sid"] == game["host_sid"],
                 "isYou": p["sid"] == sid,
+                "connected": p.get("connected", True),
             }
         )
 
@@ -188,21 +189,40 @@ def join(data):
 
     game = get_room_state(room)
 
-    if game["started"]:
-        send_error(sid, "Game already started. Create a new room for late joiners.")
-        return
-
     if len(game["players"]) >= MAX_PLAYERS_PER_ROOM:
         send_error(sid, f"Room full. Max {MAX_PLAYERS_PER_ROOM} players.")
         return
 
-    if any(p["name"].lower() == username.lower() for p in game["players"]):
-        send_error(sid, "Name already taken in this room.")
+    existing_idx = -1
+    for i, p in enumerate(game["players"]):
+        if p["name"].lower() == username.lower():
+            existing_idx = i
+            break
+
+    if existing_idx != -1:
+        old_sid = game["players"][existing_idx]["sid"]
+        
+        join_room(room)
+        game["players"][existing_idx]["sid"] = sid
+        game["players"][existing_idx]["connected"] = True
+        
+        if old_sid in game["hands"] and old_sid != sid:
+            game["hands"][sid] = game["hands"].pop(old_sid)
+            
+        if game["host_sid"] == old_sid:
+            game["host_sid"] = sid
+
+        emit("joined", {"room": room, "username": username}, to=sid)
+        broadcast_state(room)
+        return
+
+    if game["started"]:
+        send_error(sid, "Game already started. Create a new room for late joiners.")
         return
 
     join_room(room)
 
-    game["players"].append({"sid": sid, "name": username})
+    game["players"].append({"sid": sid, "name": username, "connected": True})
     game["hands"][sid] = []
 
     if game["host_sid"] is None:
@@ -359,7 +379,7 @@ def draw(data):
 def leave(data):
     room = normalize_room_name(data.get("room"))
     sid = request.sid
-    _remove_player(room, sid)
+    _remove_player(room, sid, permanent=True)
 
 
 @socketio.on("disconnect")
@@ -371,7 +391,7 @@ def handle_disconnect(data=None):
             break
 
 
-def _remove_player(room, sid):
+def _remove_player(room, sid, permanent=False):
     game = rooms.get(room)
     if not game:
         return False
@@ -379,6 +399,11 @@ def _remove_player(room, sid):
     idx = find_player_index(game["players"], sid)
     if idx == -1:
         return False
+
+    if game["started"] and not permanent:
+        game["players"][idx]["connected"] = False
+        broadcast_state(room)
+        return True
 
     leave_room(room)
     game["players"].pop(idx)

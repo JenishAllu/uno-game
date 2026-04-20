@@ -30,12 +30,9 @@ const getInitialSocketUrl = () => {
 
 const createSocket = (url) =>
   io(normalizeUrl(url), {
-    transports: ["websocket", "polling"],
+    transports: ["websocket"],
     reconnection: true,
     reconnectionAttempts: 15,
-    reconnectionDelay: 750,
-    reconnectionDelayMax: 5000,
-    timeout: 10000,
   });
 
 const COLORS = ["red", "yellow", "green", "blue"];
@@ -81,8 +78,8 @@ function UnoCard({ card, onClick, playable, showHint = false, delayIndex = 0 }) 
 }
 
 function App() {
-  const [username, setUsername] = useState("");
-  const [room, setRoom] = useState("");
+  const [username, setUsername] = useState(window.localStorage.getItem("uno_username") || "");
+  const [room, setRoom] = useState(window.localStorage.getItem("uno_room") || "");
   const [game, setGame] = useState(null);
   const [joined, setJoined] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -112,6 +109,10 @@ function App() {
       setErrorMsg("Please enter your name and room.");
       return;
     }
+    
+    window.localStorage.setItem("uno_username", username.trim());
+    window.localStorage.setItem("uno_room", room.trim().toLowerCase());
+
     if (!socketRef.current) return;
     if (!socketRef.current.connected) socketRef.current.connect();
     socketRef.current.emit("join", { username: username.trim(), room: room.trim().toLowerCase() });
@@ -146,6 +147,8 @@ function App() {
     setGame(null);
     setJoined(false);
     setWildCardId(null);
+    window.localStorage.removeItem("uno_username");
+    window.localStorage.removeItem("uno_room");
   };
 
   useEffect(() => {
@@ -156,10 +159,24 @@ function App() {
     socketRef.current = socket;
     setConnected(socket.connected);
 
-    socket.on("connect", () => { setConnected(true); setErrorMsg(""); });
+    socket.on("connect", () => { 
+      setConnected(true); 
+      setErrorMsg(""); 
+      
+      const savedUser = window.localStorage.getItem("uno_username");
+      const savedRoom = window.localStorage.getItem("uno_room");
+      if (savedUser && savedRoom) {
+         socket.emit("join", { username: savedUser, room: savedRoom });
+      }
+    });
     socket.on("disconnect", () => setConnected(false));
     socket.on("connect_error", () => { setConnected(false); setErrorMsg(`Cannot connect to game server at ${url}`); });
-    socket.on("joined", () => { setJoined(true); setErrorMsg(""); });
+    socket.on("joined", () => { 
+      setJoined(true); 
+      setErrorMsg(""); 
+      setUsername(window.localStorage.getItem("uno_username") || username);
+      setRoom(window.localStorage.getItem("uno_room") || room);
+    });
     socket.on("state", (data) => { setGame(data); setErrorMsg(""); });
     socket.on("error_msg", (data) => setErrorMsg(data?.message || "Something went wrong."));
 
@@ -183,16 +200,6 @@ function App() {
           <span style={{ color: connected ? 'var(--card-green)' : 'var(--card-red)', fontWeight: 600 }}>
             {connected ? "Server Connected" : "Connection Lost"}
           </span>
-        </div>
-
-        <div className="input-group">
-          <input
-            className="styled-input"
-            placeholder="Backend URL (Render/AWS/local)"
-            value={serverUrlInput}
-            onChange={(e) => setServerUrlInput(e.target.value)}
-          />
-          <button className="primary-btn" onClick={applyServerUrl}>Connect Backend</button>
         </div>
 
         {!joined && (
@@ -275,7 +282,7 @@ function App() {
                 <div className="player-list" style={{ justifyContent: 'center' }}>
                   {game.players.map((p, i) => (
                     <span key={i} className={`player-chip ${p.isYou ? 'is-you' : ''}`}>
-                      {p.name} {p.isHost && "👑"}
+                      {p.name} {p.isHost && "👑"} {!p.connected && "🔌"}
                     </span>
                   ))}
                 </div>
@@ -319,7 +326,7 @@ function App() {
                   <div className="player-list">
                     {game.players.map((p, i) => (
                       <span key={i} className={`player-chip ${p.isYou ? 'is-you' : ''}`} style={{ borderColor: i === game.turn ? 'var(--card-green)' : ''}}>
-                        {p.name} {/* Show Uno alert if 1 card left? */}
+                        {p.name} {!p.connected && "🔌"}
                         <span style={{ background: 'rgba(0,0,0,0.5)', padding: '2px 8px', borderRadius: '12px', marginLeft: '6px', fontSize: '0.8rem' }}>{p.handCount}</span>
                       </span>
                     ))}
