@@ -161,8 +161,8 @@ def reset_match_state(game):
     num_decks = max(1, math.ceil(needed_cards / 108))
     game["draw_pile"] = create_decks(num_decks)
     game["discard"] = []
-    game["turn"] = 0
-    game["direction"] = 1
+    game["turn"] = random.randint(0, len(game["players"]) - 1) if game["players"] else 0
+    game["direction"] = random.choice([1, -1])
     game["current_color"] = None
     game["winner"] = None
     game["started"] = True
@@ -405,6 +405,13 @@ def _remove_player(room, sid, permanent=False):
         broadcast_state(room)
         return True
 
+    was_current_turn = False
+    next_sid = None
+    if game["started"] and game["turn"] == idx:
+        was_current_turn = True
+        next_idx = (game["turn"] + game["direction"]) % len(game["players"])
+        next_sid = game["players"][next_idx]["sid"]
+
     leave_room(room)
     game["players"].pop(idx)
     game["hands"].pop(sid, None)
@@ -417,9 +424,14 @@ def _remove_player(room, sid, permanent=False):
         game["host_sid"] = game["players"][0]["sid"]
 
     if game["started"]:
-        if idx < game["turn"]:
-            game["turn"] -= 1
-        game["turn"] %= len(game["players"])
+        if was_current_turn:
+            game["turn"] = find_player_index(game["players"], next_sid)
+            if game["turn"] == -1:
+                game["turn"] = 0
+        else:
+            if idx < game["turn"]:
+                game["turn"] -= 1
+            game["turn"] %= len(game["players"])
 
         if len(game["players"]) == 1:
             game["winner"] = game["players"][0]["name"]

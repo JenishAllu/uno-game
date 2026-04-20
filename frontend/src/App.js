@@ -263,21 +263,21 @@ function App() {
             </div>
 
             {game.winner && (
-              <h1 className="app-title" style={{ fontSize: '2.5rem', color: 'var(--card-green)', margin: '40px 0' }}>
+              <h1 className="app-title" style={{ fontSize: '2rem', color: 'var(--card-green)', margin: '16px 0' }}>
                 🎉 {game.winner} has won! 🎉
               </h1>
             )}
 
             {game.started && isHost && (
-              <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                <button className="primary-btn" style={{ background: '#f59e0b' }} onClick={restartGame}>
+              <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+                <button className="primary-btn" style={{ background: '#f59e0b', padding: '10px 20px' }} onClick={restartGame}>
                   Rematch / Restart
                 </button>
               </div>
             )}
 
             {!game.started && (
-              <div style={{ textAlign: 'center', margin: '40px 0' }}>
+              <div style={{ textAlign: 'center', margin: '20px 0', flex: 1 }}>
                 <h3 style={{ marginBottom: '16px', color: '#38bdf8' }}>Lobby Standby</h3>
                 <div className="player-list" style={{ justifyContent: 'center' }}>
                   {game.players.map((p, i) => (
@@ -321,8 +321,8 @@ function App() {
                   </div>
                 </div>
 
-                <div style={{ marginTop: '40px' }}>
-                  <h3 style={{ borderBottom: '1px solid var(--panel-border)', paddingBottom: '8px', marginBottom: '16px' }}>Players</h3>
+                <div style={{ marginTop: '16px', flexShrink: 0 }}>
+                  <h3 style={{ borderBottom: '1px solid var(--panel-border)', paddingBottom: '4px', marginBottom: '8px', fontSize: '1.1rem' }}>Players</h3>
                   <div className="player-list">
                     {game.players.map((p, i) => (
                       <span key={i} className={`player-chip ${p.isYou ? 'is-you' : ''}`} style={{ borderColor: i === game.turn ? 'var(--card-green)' : ''}}>
@@ -333,9 +333,9 @@ function App() {
                   </div>
                 </div>
 
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--panel-border)', paddingBottom: '8px', marginBottom: '16px' }}>
-                    <h3>Your Dashboard</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--panel-border)', paddingBottom: '4px', marginBottom: '8px' }}>
+                    <h3 style={{ fontSize: '1.1rem' }}>Your Dashboard</h3>
                     <div style={{ fontSize: '0.9rem', color: isMyTurn ? 'var(--card-green)' : 'var(--text-muted)' }}>
                       {isMyTurn ? '● Your Turn to Play!' : 'Waiting for turn...'}
                     </div>
@@ -387,8 +387,8 @@ function App() {
               </>
             )}
 
-            <div style={{ marginTop: "40px", textAlign: 'right' }}>
-              <button className="primary-btn danger-btn" onClick={leaveGame}>Exit Table</button>
+            <div style={{ marginTop: "16px", textAlign: 'right', flexShrink: 0 }}>
+              <button className="primary-btn danger-btn" style={{ padding: '10px 20px' }} onClick={leaveGame}>Exit Table</button>
             </div>
           </div>
         )}
